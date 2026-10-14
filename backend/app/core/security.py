@@ -45,3 +45,17 @@ def create_access_token(subject: Union[str, Any], expires_delta: Union[timedelta
     }
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    """
+    Decodes and validates a JWT token using the configured secret key
+    and strictly enforcing the configured algorithm.
+    Raises jwt.PyJWTError on invalid or expired token.
+    """
+    return jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[settings.ALGORITHM],
+        options={"require": ["exp", "sub", "iat"]},
+    )

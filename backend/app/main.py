@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.api.v1.router import api_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -32,3 +33,7 @@ def root():
 @app.get("/health", tags=["Health Check"])
 def health_check():
     return {"status": "healthy"}
+
+
+# Register API v1 routes
+app.include_router(api_router, prefix=settings.API_V1_STR)
