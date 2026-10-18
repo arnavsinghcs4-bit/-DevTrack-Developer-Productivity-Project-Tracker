@@ -56,3 +56,40 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Shared auth fixtures for API endpoint tests
+# ---------------------------------------------------------------------------
+
+def register_and_login(
+    client: TestClient, email: str, full_name: str = "Test User"
+) -> str:
+    """Registers a user and returns a valid JWT access token."""
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "StrongPassword123!",
+            "full_name": full_name,
+        },
+    )
+    assert reg.status_code == 201
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "StrongPassword123!"},
+    )
+    assert login.status_code == 200
+    return login.json()["access_token"]
+
+
+@pytest.fixture
+def token_a(client: TestClient) -> str:
+    """A registered, logged-in user ("alice") for ownership tests."""
+    return register_and_login(client, "alice@example.com", "Alice")
+
+
+@pytest.fixture
+def token_b(client: TestClient) -> str:
+    """A second independent user ("bob") for cross-user isolation tests."""
+    return register_and_login(client, "bob@example.com", "Bob")

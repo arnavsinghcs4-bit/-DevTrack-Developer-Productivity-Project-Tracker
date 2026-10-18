@@ -13,6 +13,32 @@ from app.schemas.dsa_problem import (
     DSAProblemResponse,
     DSAProblemListResponse,
 )
+from app.schemas.goal import (
+    GoalBase,
+    GoalCreate,
+    GoalUpdate,
+    GoalResponse,
+    GoalListResponse,
+)
+from app.schemas.task import (
+    TaskBase,
+    TaskCreate,
+    TaskUpdate,
+    TaskResponse,
+    TaskListResponse,
+)
+from app.schemas.project import (
+    ProjectBase,
+    ProjectCreate,
+    ProjectUpdate,
+    ProjectResponse,
+    ProjectListResponse,
+    MilestoneBase,
+    MilestoneCreate,
+    MilestoneUpdate,
+    MilestoneResponse,
+    MilestoneListResponse,
+)
 
 __all__ = [
     "UserBase",
@@ -26,4 +52,24 @@ __all__ = [
     "DSAProblemUpdate",
     "DSAProblemResponse",
     "DSAProblemListResponse",
+    "GoalBase",
+    "GoalCreate",
+    "GoalUpdate",
+    "GoalResponse",
+    "GoalListResponse",
+    "TaskBase",
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskResponse",
+    "TaskListResponse",
+    "ProjectBase",
+    "ProjectCreate",
+    "ProjectUpdate",
+    "ProjectResponse",
+    "ProjectListResponse",
+    "MilestoneBase",
+    "MilestoneCreate",
+    "MilestoneUpdate",
+    "MilestoneResponse",
+    "MilestoneListResponse",
 ]
