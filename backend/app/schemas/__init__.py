@@ -6,6 +6,13 @@ from app.schemas.user import (
     Token,
     TokenPayload,
 )
+from app.schemas.dsa_problem import (
+    DSAProblemBase,
+    DSAProblemCreate,
+    DSAProblemUpdate,
+    DSAProblemResponse,
+    DSAProblemListResponse,
+)
 
 __all__ = [
     "UserBase",
@@ -14,4 +21,9 @@ __all__ = [
     "UserResponse",
     "Token",
     "TokenPayload",
+    "DSAProblemBase",
+    "DSAProblemCreate",
+    "DSAProblemUpdate",
+    "DSAProblemResponse",
+    "DSAProblemListResponse",
 ]

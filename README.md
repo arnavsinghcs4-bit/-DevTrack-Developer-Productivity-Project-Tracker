@@ -50,10 +50,7 @@ DevTrack/
 │   └── .env                  # Local environment file
 ├── frontend/                 # Vite + React Single Page Application
 │   ├── src/
-│   │   ├── components/       # Reusable UI components
-│   │   ├── context/          # Global AuthContext & state
-│   │   ├── services/         # Centralized API fetch wrapper
-│   │   └── App.jsx           # App entrypoint
+│   │   └── App.jsx           # App entrypoint (UI pending)
 │   ├── package.json
 │   └── vite.config.js
 ├── .gitignore
@@ -108,6 +105,25 @@ The React application will be available at [http://localhost:5173](http://localh
 cd backend
 .venv\Scripts\pytest.exe
 ```
+
+---
+
+## 📡 API Overview
+
+All endpoints below except `register` and `login` require a Bearer token obtained from `POST /api/v1/auth/login`.
+
+| Method | Path | Description | Success |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/v1/auth/register` | Create an account (8+ chars, ≤72 UTF-8 bytes) | 201 |
+| POST | `/api/v1/auth/login` | Authenticate and obtain a JWT access token | 200 |
+| GET | `/api/v1/auth/me` | Current user profile | 200 |
+| POST | `/api/v1/dsa-problems` | Create a DSA problem record | 201 |
+| GET | `/api/v1/dsa-problems` | List own records (paginated: `page`, `page_size` ≤ 100) | 200 |
+| GET | `/api/v1/dsa-problems/{id}` | Retrieve one record (owner only) | 200 |
+| PATCH | `/api/v1/dsa-problems/{id}` | Partial update of allowed fields (owner only) | 200 |
+| DELETE | `/api/v1/dsa-problems/{id}` | Delete a record (owner only) | 204 |
+
+Ownership is enforced inside every SQL query: another user's record returns the same `404` as a missing one, and client-supplied ownership fields are rejected with `422`.
 
 ---
 
