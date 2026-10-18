@@ -201,3 +201,76 @@ def test_access_me_nonexistent_user_token(client: TestClient):
     )
     assert response.status_code == 401
     assert "user not found" in response.json()["detail"].lower()
+
+
+def test_registration_valid_ascii_password(client: TestClient):
+    """12. Test registration with an ordinary valid ASCII password."""
+    payload = {
+        "email": "asciipass@example.com",
+        "password": "ValidAsciiPassword123!",
+        "full_name": "Ascii User",
+    }
+    response = client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 201
+    assert response.json()["email"] == "asciipass@example.com"
+
+
+def test_registration_valid_multibyte_unicode_password(client: TestClient):
+    """13. Test registration with a valid multibyte Unicode password whose UTF-8 byte count is <= 72 bytes."""
+    # "Pä§§wörd🔑2026" is 14 characters, but 20 bytes in UTF-8
+    multibyte_pass = "Pä§§wörd🔑2026"
+    assert len(multibyte_pass.encode("utf-8")) <= 72
+
+    payload = {
+        "email": "unicodepass@example.com",
+        "password": multibyte_pass,
+        "full_name": "Unicode User",
+    }
+    response = client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 201
+    assert response.json()["email"] == "unicodepass@example.com"
+
+    # Verify user can also log in successfully with this multibyte password
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": "unicodepass@example.com", "password": multibyte_pass},
+    )
+    assert login_res.status_code == 200
+    assert "access_token" in login_res.json()
+
+
+def test_registration_oversized_unicode_password_rejected(client: TestClient, db_session: Session):
+    """14. Test that a password with < 72 characters but > 72 UTF-8 bytes returns HTTP 422 and does NOT create a user."""
+    # 25 lock emojis: character count is 25 (< 72), but UTF-8 byte count is 25 * 4 = 100 bytes (> 72 bytes)
+    oversized_pass = "🔐" * 25
+    assert len(oversized_pass) < 72
+    assert len(oversized_pass.encode("utf-8")) > 72
+
+    payload = {
+        "email": "oversized@example.com",
+        "password": oversized_pass,
+        "full_name": "Oversized User",
+    }
+    response = client.post("/api/v1/auth/register", json=payload)
+    # Must return HTTP 422 Unprocessable Entity, not an unhandled HTTP 500 error
+    assert response.status_code == 422
+    data = response.json()
+    assert "72 bytes" in str(data["detail"]).lower()
+
+    # Confirm that the user was NOT created in the database
+    user = db_session.execute(
+        select(User).where(User.email == "oversized@example.com")
+    ).scalar_one_or_none()
+    assert user is None
+
+
+def test_login_oversized_password_rejected(client: TestClient):
+    """15. Test that submitting an oversized password (>72 bytes) during login returns HTTP 422."""
+    oversized_pass = "🔐" * 25
+    payload = {
+        "email": "somelogin@example.com",
+        "password": oversized_pass,
+    }
+    response = client.post("/api/v1/auth/login", json=payload)
+    assert response.status_code == 422
+    assert "72 bytes" in str(response.json()["detail"]).lower()

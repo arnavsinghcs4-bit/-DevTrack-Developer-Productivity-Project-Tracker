@@ -25,19 +25,32 @@ class UserCreate(UserBase):
     password: str = Field(
         ...,
         min_length=8,
-        max_length=72,
-        description="Password must be between 8 and 72 characters (bcrypt limit)",
+        description="Password must be between 8 characters and 72 UTF-8 bytes",
     )
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password cannot exceed 72 bytes in UTF-8 encoding")
+        return v
 
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=1, max_length=72)
+    password: str = Field(..., min_length=1)
 
     @field_validator("email")
     @classmethod
     def normalize_email(cls, v: str) -> str:
         return v.strip().lower()
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password cannot exceed 72 bytes in UTF-8 encoding")
+        return v
 
 
 class UserResponse(UserBase):

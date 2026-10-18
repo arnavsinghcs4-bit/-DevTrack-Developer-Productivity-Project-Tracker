@@ -1,17 +1,63 @@
 from typing import List, Union
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEV_DEFAULT_SECRET_KEY = "devtrack_super_secret_jwt_key_change_in_production_2026"
+SUPPORTED_ENVIRONMENTS = {
+    "development",
+    "dev",
+    "staging",
+    "production",
+    "prod",
+    "testing",
+    "test",
+}
 
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "DevTrack API"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
+    ENVIRONMENT: str = "development"
 
     # Security
-    SECRET_KEY: str = "devtrack_super_secret_jwt_key_change_in_production_2026"
+    SECRET_KEY: str = DEV_DEFAULT_SECRET_KEY
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        raw_env = self.ENVIRONMENT
+        if not raw_env or not raw_env.strip():
+            raise ValueError(
+                "ENVIRONMENT cannot be empty. "
+                "Supported values are: 'development' (dev), 'staging', 'production' (prod), 'testing' (test)."
+            )
+        env = raw_env.strip().lower()
+        if env not in SUPPORTED_ENVIRONMENTS:
+            raise ValueError(
+                f"Invalid ENVIRONMENT '{raw_env}'. "
+                f"Supported values are: 'development' (dev), 'staging', 'production' (prod), 'testing' (test)."
+            )
+        self.ENVIRONMENT = env
+
+        # Normalize secret key whitespace so the exact stripped value is used for JWT operations
+        secret = self.SECRET_KEY.strip() if self.SECRET_KEY else ""
+        self.SECRET_KEY = secret
+
+        if env in ("production", "prod", "staging"):
+            if not secret:
+                raise ValueError("SECRET_KEY is required and cannot be empty in production.")
+            if secret == DEV_DEFAULT_SECRET_KEY:
+                raise ValueError(
+                    "Insecure default SECRET_KEY cannot be used in production. "
+                    "Please configure a strong, unique SECRET_KEY in your environment."
+                )
+            if len(secret) < 32:
+                raise ValueError(
+                    "SECRET_KEY must be at least 32 characters long (excluding whitespace) in production."
+                )
+        return self
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [
