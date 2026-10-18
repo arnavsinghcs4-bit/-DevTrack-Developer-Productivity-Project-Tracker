@@ -114,8 +114,8 @@ All endpoints below except `register` and `login` require a Bearer token obtaine
 
 | Method | Path | Description | Success |
 | :--- | :--- | :--- | :--- |
-| POST | `/api/v1/auth/register` | Create an account (8+ chars, ≤72 UTF-8 bytes) | 201 |
-| POST | `/api/v1/auth/login` | Authenticate and obtain a JWT access token | 200 |
+| POST | `/api/v1/auth/register` | Create an account (8+ chars, ≤72 UTF-8 bytes); rate-limited per IP | 201 |
+| POST | `/api/v1/auth/login` | Authenticate and obtain a JWT access token; rate-limited, timing-equalized | 200 |
 | GET | `/api/v1/auth/me` | Current user profile | 200 |
 | POST | `/api/v1/dsa-problems` | Create a DSA problem record | 201 |
 | GET | `/api/v1/dsa-problems` | List own records (paginated: `page`, `page_size` ≤ 100) | 200 |
@@ -153,3 +153,9 @@ Ownership is enforced inside every SQL query: another user's record returns the 
 
 4. **Python 3.13 Security Compatibility**:
    In Python 3.13, the legacy standard library `crypt` module was removed (PEP 594), causing unmaintained packages like `passlib` to fail. DevTrack uses `bcrypt` directly with cryptographically secure random salts, paired with `PyJWT` for stateless tokens.
+
+5. **Auth Abuse Protection (Rate Limiting + Timing Equalization)**:
+   `POST /auth/login` and `POST /auth/register` are guarded by a per-IP sliding-window limiter (default 10/min and 5/min) returning `429` with a `Retry-After` header; rejected requests are not recorded so a blocked client cannot extend its own lockout. Independently, login performs exactly one bcrypt comparison on every attempt — against a dummy hash when the email is unknown — so response timing cannot reveal whether an account exists (user enumeration via timing side channel). The limiter is an injectable FastAPI dependency: tests override it exactly like `get_db`, and storage is single-process by design (swap `app/core/rate_limit.py` for Redis when scaling to multiple workers).
+
+6. **Continuous Integration (GitHub Actions)**:
+   Every push and pull request to `main` runs the full pytest suite on a clean Linux runner with no `.env`, no secrets, and no database service — the suite executes entirely against in-memory SQLite, proving test isolation from the Neon production database.

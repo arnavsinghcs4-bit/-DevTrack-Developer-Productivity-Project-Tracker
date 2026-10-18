@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
+from app.core.rate_limit import auth_rate_limit
 from app.main import app
 
 # Create completely isolated in-memory SQLite database for testing
@@ -53,6 +54,10 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
             pass
 
     app.dependency_overrides[get_db] = override_get_db
+    # Auth endpoints are rate-limited in production; the test suite performs
+    # hundreds of logins/registrations in one process, so the limiter is
+    # disabled here. tests/test_rate_limit.py re-enables it per test.
+    app.dependency_overrides[auth_rate_limit] = lambda: None
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

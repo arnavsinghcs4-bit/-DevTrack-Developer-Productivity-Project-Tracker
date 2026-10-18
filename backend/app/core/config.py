@@ -59,6 +59,12 @@ class Settings(BaseSettings):
                 )
         return self
 
+    # Rate limiting (auth endpoints) - see app/core/rate_limit.py
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_LOGIN_ATTEMPTS: int = 10
+    RATE_LIMIT_REGISTER_ATTEMPTS: int = 5
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
