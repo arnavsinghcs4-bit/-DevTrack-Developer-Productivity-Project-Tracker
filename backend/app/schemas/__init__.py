@@ -39,6 +39,13 @@ from app.schemas.project import (
     MilestoneResponse,
     MilestoneListResponse,
 )
+from app.schemas.analytics import (
+    DashboardResponse,
+    DsaAnalytics,
+    GoalAnalytics,
+    TaskAnalytics,
+    ProjectAnalytics,
+)
 
 __all__ = [
     "UserBase",
@@ -72,4 +79,9 @@ __all__ = [
     "MilestoneUpdate",
     "MilestoneResponse",
     "MilestoneListResponse",
+    "DashboardResponse",
+    "DsaAnalytics",
+    "GoalAnalytics",
+    "TaskAnalytics",
+    "ProjectAnalytics",
 ]

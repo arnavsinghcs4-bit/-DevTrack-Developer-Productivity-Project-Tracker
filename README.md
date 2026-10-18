@@ -122,8 +122,21 @@ All endpoints below except `register` and `login` require a Bearer token obtaine
 | GET | `/api/v1/dsa-problems/{id}` | Retrieve one record (owner only) | 200 |
 | PATCH | `/api/v1/dsa-problems/{id}` | Partial update of allowed fields (owner only) | 200 |
 | DELETE | `/api/v1/dsa-problems/{id}` | Delete a record (owner only) | 204 |
+| POST | `/api/v1/goals` | Create a daily/weekly goal (date range validated) | 201 |
+| GET | `/api/v1/goals` | List own goals (paginated) | 200 |
+| GET / PATCH / DELETE | `/api/v1/goals/{id}` | Retrieve / update / delete a goal (owner only) | 200 / 200 / 204 |
+| POST | `/api/v1/tasks` | Create a task (`project_id` must reference an owned project) | 201 |
+| GET | `/api/v1/tasks` | List own tasks (paginated; filter by `status`, `priority`) | 200 |
+| GET / PATCH / DELETE | `/api/v1/tasks/{id}` | Retrieve / update / delete a task (owner only) | 200 / 200 / 204 |
+| POST | `/api/v1/projects` | Create a project (http(s)-only URLs) | 201 |
+| GET | `/api/v1/projects` | List own projects (paginated) | 200 |
+| GET / PATCH / DELETE | `/api/v1/projects/{id}` | Retrieve / update / delete a project (owner only) | 200 / 200 / 204 |
+| POST | `/api/v1/projects/{id}/milestones` | Create a milestone under an owned project | 201 |
+| GET | `/api/v1/projects/{id}/milestones` | List a project's milestones (paginated) | 200 |
+| GET / PATCH / DELETE | `/api/v1/projects/{id}/milestones/{mid}` | Retrieve / update / delete a milestone | 200 / 200 / 204 |
+| GET | `/api/v1/analytics/dashboard` | SQL-aggregated metrics: breakdowns, dense solve trend (`days` = 1-365), completion and overdue rates | 200 |
 
-Ownership is enforced inside every SQL query: another user's record returns the same `404` as a missing one, and client-supplied ownership fields are rejected with `422`.
+Ownership is enforced inside every SQL query: another user's record returns the same `404` as a missing one, and client-supplied ownership fields are rejected with `422`. Milestones have no `user_id` column — ownership flows through the parent project via a SQL join. All analytics queries are aggregated in the database (`GROUP BY`, `COUNT(DISTINCT)`, conditional `SUM(CASE)`, `AVG`) and scoped to the authenticated user.
 
 ---
 
