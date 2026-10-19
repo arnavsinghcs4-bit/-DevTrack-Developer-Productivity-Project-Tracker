@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Float, case, cast, func, select
+from sqlalchemy import Float, Select, case, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -46,6 +46,110 @@ def _zero_filled_counts(rows, keys, label) -> list:
     return [{label: key, "count": count} for key, count in counts.items()]
 
 
+def build_dashboard_statements(
+    user_id: int, today: date, days: int
+) -> dict[str, Select]:
+    """
+    Builds every SELECT the dashboard endpoint executes, keyed by a stable
+    name (17 statements, each intended to run exactly once per request).
+
+    This factory exists deliberately (Branch F): the performance test and
+    scripts/explain_dashboard.py EXPLAIN the *exact* statements production
+    runs — there is no second copy of these queries to drift out of sync.
+    Adding a statement here automatically puts it under the perf test's
+    query-count, plan, and timing assertions.
+
+    Indexing context (composite indices placed in the initial migration):
+    - dsa_problems: (user_id, solved_date), (user_id, topic),
+      (user_id, difficulty) — the trend's range filter and the GROUP BYs
+      can be answered by walking an index instead of scanning the table.
+    - tasks: (user_id, status, priority); goals: (user_id, ...);
+      milestones reach ownership through projects (ix_milestones_project_id).
+    """
+    uid = user_id
+    cutoff = today - timedelta(days=days - 1)  # inclusive lower bound
+
+    owner = DSAProblem.user_id == uid
+    goal_owner = Goal.user_id == uid
+    task_owner = Task.user_id == uid
+    project_owner = Project.user_id == uid
+
+    return {
+        # ---- DSA problems: totals, breakdowns, distinct days, daily trend
+        "dsa_total": select(func.count()).select_from(DSAProblem).where(owner),
+        "dsa_active_days": select(func.count(func.distinct(DSAProblem.solved_date))).where(
+            owner
+        ),
+        "dsa_by_difficulty": select(DSAProblem.difficulty, func.count())
+        .where(owner)
+        .group_by(DSAProblem.difficulty),
+        "dsa_by_topic": select(DSAProblem.topic, func.count())
+        .where(owner)
+        .group_by(DSAProblem.topic)
+        .order_by(func.count().desc(), DSAProblem.topic.asc())
+        .limit(TOPIC_LIMIT),
+        "dsa_by_platform": select(DSAProblem.platform, func.count())
+        .where(owner)
+        .group_by(DSAProblem.platform)
+        .order_by(func.count().desc(), DSAProblem.platform.asc()),
+        # Range scan over (user_id, solved_date): only `days` rows are
+        # touched, regardless of how large the user's full history is.
+        "dsa_trend": select(DSAProblem.solved_date, func.count())
+        .where(owner, DSAProblem.solved_date >= cutoff)
+        .group_by(DSAProblem.solved_date),
+        # ---- Goals: totals, completion rate, SQL AVG of progress percentage
+        "goals_total": select(func.count()).select_from(Goal).where(goal_owner),
+        "goals_completed": select(func.count())
+        .select_from(Goal)
+        .where(goal_owner, Goal.is_completed.is_(True)),
+        "goals_by_type": select(
+            Goal.goal_type,
+            func.count(),
+            func.coalesce(func.sum(case((Goal.is_completed.is_(True), 1), else_=0)), 0),
+        )
+        .where(goal_owner)
+        .group_by(Goal.goal_type),
+        # AVG(current / target * 100), computed in SQL; target_count > 0 is a
+        # defensive filter (the API enforces >= 1, but the column has no CHECK).
+        "goals_avg_progress": select(
+            func.avg(
+                cast(Goal.current_count, Float) / cast(Goal.target_count, Float) * 100
+            )
+        )
+        .where(goal_owner, Goal.target_count > 0),
+        # ---- Tasks: status/priority breakdowns and overdue count
+        "tasks_total": select(func.count()).select_from(Task).where(task_owner),
+        "tasks_overdue": select(func.count())
+        .select_from(Task)
+        .where(
+            task_owner,
+            Task.due_date.is_not(None),
+            Task.due_date < today,
+            Task.status != "done",
+        ),
+        "tasks_by_status": select(Task.status, func.count())
+        .where(task_owner)
+        .group_by(Task.status),
+        "tasks_by_priority": select(Task.priority, func.count())
+        .where(task_owner)
+        .group_by(Task.priority),
+        # ---- Projects and milestones (milestones joined through owned projects)
+        "projects_total": select(func.count()).select_from(Project).where(project_owner),
+        "projects_by_status": select(Project.status, func.count())
+        .where(project_owner)
+        .group_by(Project.status),
+        # Each milestone joins to exactly one project, so COUNT(*) counts
+        # milestones (not projects); ownership flows through the join.
+        "milestones_rollup": select(
+            func.count(),
+            func.coalesce(func.sum(case((Milestone.is_completed.is_(True), 1), else_=0)), 0),
+        )
+        .select_from(Milestone)
+        .join(Project, Milestone.project_id == Project.id)
+        .where(Project.user_id == uid),
+    }
+
+
 @router.get(
     "/dashboard",
     response_model=DashboardResponse,
@@ -64,53 +168,27 @@ def get_dashboard(
     AVG) rather than Python-side number crunching. Every query is scoped by
     user_id so one account can never observe another's metrics.
 
-    The `solved_trend` is a dense daily series (missing days are zero-filled)
-    across the requested window so chart clients can plot it directly.
+    Exactly one statement per entry in build_dashboard_statements runs — the
+    performance suite pins that count (N+1 guard) alongside plan and timing
+    assertions. The `solved_trend` is a dense daily series (missing days are
+    zero-filled) across the requested window so chart clients can plot it
+    directly.
     """
-    uid = current_user.id
     today = date.today()
-    cutoff = today - timedelta(days=days - 1)  # inclusive lower bound
+    stmts = build_dashboard_statements(current_user.id, today, days)
 
     # ------------------------------------------------------------------
     # DSA problems: totals, breakdowns, distinct active days, daily trend
     # ------------------------------------------------------------------
-    owner = DSAProblem.user_id == uid
+    dsa_total = db.execute(stmts["dsa_total"]).scalar_one()
+    active_days = db.execute(stmts["dsa_active_days"]).scalar_one()
+    difficulty_rows = db.execute(stmts["dsa_by_difficulty"]).all()
+    topic_rows = db.execute(stmts["dsa_by_topic"]).all()
+    platform_rows = db.execute(stmts["dsa_by_platform"]).all()
 
-    dsa_total = db.execute(
-        select(func.count()).select_from(DSAProblem).where(owner)
-    ).scalar_one()
-
-    active_days = db.execute(
-        select(func.count(func.distinct(DSAProblem.solved_date))).where(owner)
-    ).scalar_one()
-
-    difficulty_rows = db.execute(
-        select(DSAProblem.difficulty, func.count())
-        .where(owner)
-        .group_by(DSAProblem.difficulty)
-    ).all()
-
-    topic_rows = db.execute(
-        select(DSAProblem.topic, func.count())
-        .where(owner)
-        .group_by(DSAProblem.topic)
-        .order_by(func.count().desc(), DSAProblem.topic.asc())
-        .limit(TOPIC_LIMIT)
-    ).all()
-
-    platform_rows = db.execute(
-        select(DSAProblem.platform, func.count())
-        .where(owner)
-        .group_by(DSAProblem.platform)
-        .order_by(func.count().desc(), DSAProblem.platform.asc())
-    ).all()
-
-    trend_rows = db.execute(
-        select(DSAProblem.solved_date, func.count())
-        .where(owner, DSAProblem.solved_date >= cutoff)
-        .group_by(DSAProblem.solved_date)
-    ).all()
+    trend_rows = db.execute(stmts["dsa_trend"]).all()
     trend_counts = {row[0]: row[1] for row in trend_rows}
+    cutoff = today - timedelta(days=days - 1)
     solved_trend = [
         TrendPoint(
             solved_date=cutoff + timedelta(days=i),
@@ -136,42 +214,13 @@ def get_dashboard(
     # ------------------------------------------------------------------
     # Goals: totals, completion rate, SQL AVG of progress percentage
     # ------------------------------------------------------------------
-    goal_owner = Goal.user_id == uid
-
-    goal_total = db.execute(
-        select(func.count()).select_from(Goal).where(goal_owner)
-    ).scalar_one()
-
-    goal_completed = db.execute(
-        select(func.count())
-        .select_from(Goal)
-        .where(goal_owner, Goal.is_completed.is_(True))
-    ).scalar_one()
-
-    goal_type_rows = db.execute(
-        select(
-            Goal.goal_type,
-            func.count(),
-            func.coalesce(
-                func.sum(case((Goal.is_completed.is_(True), 1), else_=0)), 0
-            ),
-        )
-        .where(goal_owner)
-        .group_by(Goal.goal_type)
-    ).all()
+    goal_total = db.execute(stmts["goals_total"]).scalar_one()
+    goal_completed = db.execute(stmts["goals_completed"]).scalar_one()
+    goal_type_rows = db.execute(stmts["goals_by_type"]).all()
     goal_type_map = dict.fromkeys(GOAL_TYPES, (0, 0))
     goal_type_map.update({row[0]: (row[1], row[2]) for row in goal_type_rows})
 
-    # AVG(current / target * 100), computed in SQL; target_count > 0 is a
-    # defensive filter (the API enforces >= 1, but the column has no CHECK).
-    avg_progress = db.execute(
-        select(
-            func.avg(
-                cast(Goal.current_count, Float) / cast(Goal.target_count, Float) * 100
-            )
-        )
-        .where(goal_owner, Goal.target_count > 0)
-    ).scalar()
+    avg_progress = db.execute(stmts["goals_avg_progress"]).scalar()
 
     goals = GoalAnalytics(
         total=goal_total,
@@ -191,32 +240,10 @@ def get_dashboard(
     # ------------------------------------------------------------------
     # Tasks: status/priority breakdowns and overdue count
     # ------------------------------------------------------------------
-    task_owner = Task.user_id == uid
-
-    task_total = db.execute(
-        select(func.count()).select_from(Task).where(task_owner)
-    ).scalar_one()
-
-    overdue = db.execute(
-        select(func.count())
-        .select_from(Task)
-        .where(
-            task_owner,
-            Task.due_date.is_not(None),
-            Task.due_date < today,
-            Task.status != "done",
-        )
-    ).scalar_one()
-
-    task_status_rows = db.execute(
-        select(Task.status, func.count()).where(task_owner).group_by(Task.status)
-    ).all()
-
-    task_priority_rows = db.execute(
-        select(Task.priority, func.count())
-        .where(task_owner)
-        .group_by(Task.priority)
-    ).all()
+    task_total = db.execute(stmts["tasks_total"]).scalar_one()
+    overdue = db.execute(stmts["tasks_overdue"]).scalar_one()
+    task_status_rows = db.execute(stmts["tasks_by_status"]).all()
+    task_priority_rows = db.execute(stmts["tasks_by_priority"]).all()
 
     tasks = TaskAnalytics(
         total=task_total,
@@ -236,31 +263,9 @@ def get_dashboard(
     # ------------------------------------------------------------------
     # Projects and milestones (milestones joined through owned projects)
     # ------------------------------------------------------------------
-    project_owner = Project.user_id == uid
-
-    project_total = db.execute(
-        select(func.count()).select_from(Project).where(project_owner)
-    ).scalar_one()
-
-    project_status_rows = db.execute(
-        select(Project.status, func.count())
-        .where(project_owner)
-        .group_by(Project.status)
-    ).all()
-
-    # Each milestone joins to exactly one project, so COUNT(*) counts
-    # milestones (not projects); ownership flows through the join.
-    milestone_total, milestone_completed = db.execute(
-        select(
-            func.count(),
-            func.coalesce(
-                func.sum(case((Milestone.is_completed.is_(True), 1), else_=0)), 0
-            ),
-        )
-        .select_from(Milestone)
-        .join(Project, Milestone.project_id == Project.id)
-        .where(Project.user_id == uid)
-    ).one()
+    project_total = db.execute(stmts["projects_total"]).scalar_one()
+    project_status_rows = db.execute(stmts["projects_by_status"]).all()
+    milestone_total, milestone_completed = db.execute(stmts["milestones_rollup"]).one()
 
     projects = ProjectAnalytics(
         total=project_total,

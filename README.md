@@ -39,10 +39,12 @@ DevTrack/
 │   │   │   ├── dsa_problem.py
 │   │   │   ├── goal.py
 │   │   │   ├── task.py
-│   │   │   └── project.py
+│   │   │   ├── project.py
+│   │   │   └── refresh_token.py
 │   │   ├── schemas/          # Pydantic models for validation and serialization
 │   │   └── main.py           # FastAPI entrypoint, CORS configuration
-│   ├── tests/                # Automated pytest suite
+│   ├── tests/                # Automated pytest suite (incl. EXPLAIN-driven perf tests)
+│   ├── scripts/              # explain_dashboard.py — EXPLAIN ANALYZE harness
 │   ├── alembic.ini           # Alembic CLI configuration
 │   ├── pytest.ini            # Pytest configuration
 │   ├── requirements.txt      # Python dependencies
@@ -115,6 +117,18 @@ cd backend
 .venv\Scripts\pytest.exe
 ```
 
+### 4. Dashboard Performance Validation (EXPLAIN ANALYZE)
+```bash
+cd backend
+# Seeds a local throwaway SQLite benchmark with ~2,000 problems and prints
+# EXPLAIN QUERY PLAN + per-statement timings for every dashboard query:
+.venv\Scripts\python.exe scripts\explain_dashboard.py --database-url sqlite:///./bench.db --seed 2000
+
+# Against a local Postgres replica (prints full EXPLAIN ANALYZE, BUFFERS):
+.venv\Scripts\python.exe scripts\explain_dashboard.py --database-url postgresql+psycopg://... --seed 2000
+```
+The harness refuses non-localhost hosts unless `--allow-remote` is passed, and even then runs strictly read-only (no seeding). `--cleanup` removes the benchmark data. The same statements are exercised in CI by `tests/test_dashboard_performance.py` (index-coverage, N+1 query-count guard, and wall-time ceiling over a seeded ~5,300-row dataset).
+
 ---
 
 ## 📡 API Overview
@@ -176,3 +190,6 @@ Ownership is enforced inside every SQL query: another user's record returns the 
 
 8. **Rotating Refresh Tokens with Reuse Detection (Two-Token Auth)**:
    Sessions are split into a ~30-minute stateless JWT access token and a 7-day opaque refresh token stored server-side (`refresh_tokens` table) as a SHA-256 hash — a leaked database yields no usable credentials. Every `POST /auth/refresh` is single-use: the presented token is revoked and chained to its successor. Replaying a rotated token is a mathematically unambiguous compromise signal (attacker and legitimate client cannot both hold the same fresh token), so the endpoint revokes the user's entire token family and forces a clean login — the security win a static long-lived token cannot offer. This design also makes logout *real*: revocation is a server-side `UPDATE`, not a client-side memory wipe, and the frontend's single-flight refresh (concurrent 401s share one rotation) exists specifically so a fast multi-tab client never triggers its own reuse alarm. `alembic upgrade head` applies the new table; access-token TTL dropped from 120 to 30 minutes to bound the stateless window.
+
+9. **Measured, Not Guessed: EXPLAIN-Driven Dashboard Performance**:
+   The 17 dashboard statements were extracted into `build_dashboard_statements()` so that tests and tooling EXPLAIN the *exact* SQL production executes — no second copy to drift. CI pins three structural properties over a seeded ~5,300-row two-user dataset: an exact query-count (an N+1 guard the moment anyone adds a per-row query), index coverage of the trend's range scan via `idx_dsa_user_solved_date` (asserted only where selectivity makes the planner's choice unambiguous — pinning plans the planner may legitimately choose differently pins a decision, not a property), and a generous wall-time ceiling purely as a catastrophic-regression net. `scripts/explain_dashboard.py` extends the same statements to real Postgres with `EXPLAIN (ANALYZE, BUFFERS)`, refusing remote hosts by default. Measured result at 2,000+ problems: every statement is answered by an index (most covering), each under ~1ms on SQLite.
