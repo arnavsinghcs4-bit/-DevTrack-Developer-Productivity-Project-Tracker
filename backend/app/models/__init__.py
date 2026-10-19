@@ -4,6 +4,7 @@ from app.models.dsa_problem import DSAProblem
 from app.models.goal import Goal
 from app.models.task import Task
 from app.models.project import Project, Milestone
+from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "Base",
@@ -13,4 +14,5 @@ __all__ = [
     "Task",
     "Project",
     "Milestone",
+    "RefreshToken",
 ]

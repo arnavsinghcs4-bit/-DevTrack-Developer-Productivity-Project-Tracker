@@ -119,12 +119,14 @@ cd backend
 
 ## 📡 API Overview
 
-All endpoints below except `register` and `login` require a Bearer token obtained from `POST /api/v1/auth/login`.
+All endpoints below except `register`, `login`, `refresh`, and `logout` require a Bearer token obtained from `POST /api/v1/auth/login`. `refresh` and `logout` authenticate via the refresh token (in the request body); `logout` additionally requires the Bearer access token.
 
 | Method | Path | Description | Success |
 | :--- | :--- | :--- | :--- |
 | POST | `/api/v1/auth/register` | Create an account (8+ chars, ≤72 UTF-8 bytes); rate-limited per IP | 201 |
-| POST | `/api/v1/auth/login` | Authenticate and obtain a JWT access token; rate-limited, timing-equalized | 200 |
+| POST | `/api/v1/auth/login` | Authenticate and obtain a token pair: short-lived JWT access token + rotating refresh token; rate-limited, timing-equalized | 200 |
+| POST | `/api/v1/auth/refresh` | Rotate a refresh token into a new pair (single-use; replay revokes the whole token family); rate-limited | 200 |
+| POST | `/api/v1/auth/logout` | Server-side revocation of the given refresh token, or all sessions with `all_devices: true`; idempotent | 204 |
 | GET | `/api/v1/auth/me` | Current user profile | 200 |
 | POST | `/api/v1/dsa-problems` | Create a DSA problem record | 201 |
 | GET | `/api/v1/dsa-problems` | List own records (paginated: `page`, `page_size` ≤ 100) | 200 |
@@ -171,3 +173,6 @@ Ownership is enforced inside every SQL query: another user's record returns the 
 
 7. **Frontend Auth Architecture (Single Token Source of Truth)**:
    The JWT is written to `localStorage` by exactly one module (`services/api.js`), which also attaches it to every request and clears it on any 401 of an authenticated call — so a stale token degrades into a redirect to `/login`, never a broken screen. `AuthContext` revalidates the session on page load via `GET /auth/me`, `ProtectedRoute` holds the intended destination across the login redirect, and all API errors (422 field arrays, 429 retry hints, network failures) funnel through one `formatApiError` normalizer. Styling is deliberate plain CSS with no UI framework: layout, tokens, and a bar chart rendered with flex heights — zero runtime styling dependencies.
+
+8. **Rotating Refresh Tokens with Reuse Detection (Two-Token Auth)**:
+   Sessions are split into a ~30-minute stateless JWT access token and a 7-day opaque refresh token stored server-side (`refresh_tokens` table) as a SHA-256 hash — a leaked database yields no usable credentials. Every `POST /auth/refresh` is single-use: the presented token is revoked and chained to its successor. Replaying a rotated token is a mathematically unambiguous compromise signal (attacker and legitimate client cannot both hold the same fresh token), so the endpoint revokes the user's entire token family and forces a clean login — the security win a static long-lived token cannot offer. This design also makes logout *real*: revocation is a server-side `UPDATE`, not a client-side memory wipe, and the frontend's single-flight refresh (concurrent 401s share one rotation) exists specifically so a fast multi-tab client never triggers its own reuse alarm. `alembic upgrade head` applies the new table; access-token TTL dropped from 120 to 30 minutes to bound the stateless window.

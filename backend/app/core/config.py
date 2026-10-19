@@ -23,7 +23,11 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = DEV_DEFAULT_SECRET_KEY
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
+    # Short-lived by design: the access token only has to survive between
+    # silent refreshes (see POST /auth/refresh), so a stolen JWT expires
+    # quickly while the rotating refresh token handles long sessions.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":

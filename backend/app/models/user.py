@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from app.models.goal import Goal
     from app.models.task import Task
     from app.models.project import Project
+    from app.models.refresh_token import RefreshToken
 
 
 class User(Base):
@@ -44,6 +45,12 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     projects: Mapped[List["Project"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    # Active + historical refresh-token sessions; deleted with the user so a
+    # removed account can never be resumed from a surviving token.
+    refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )

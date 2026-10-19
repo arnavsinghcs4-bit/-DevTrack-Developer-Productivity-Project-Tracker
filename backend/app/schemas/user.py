@@ -66,6 +66,30 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class TokenPair(Token):
+    """Login/refresh response: short-lived access token + long-lived rotating refresh token."""
+    refresh_token: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(
+        ...,
+        min_length=1,
+        description="Opaque refresh token from /auth/login or a previous /auth/refresh",
+    )
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: Optional[str] = Field(
+        None,
+        description="Refresh token to revoke; omit to rely on all_devices alone",
+    )
+    all_devices: bool = Field(
+        False,
+        description="Revoke every active refresh token for the authenticated user",
+    )
+
+
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
     exp: Optional[int] = None

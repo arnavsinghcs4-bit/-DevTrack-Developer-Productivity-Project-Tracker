@@ -1,14 +1,28 @@
 /**
  * Auth state for the whole app: who is logged in, and how to log in/out.
  *
- * The JWT itself lives in localStorage (see services/api.js); this context
- * keeps the current user profile in memory and revalidates it on page load
- * via GET /auth/me, so a stale token (expired past the 120-minute window)
- * cleanly bounces the user to /login instead of rendering a broken shell.
+ * Session model (Branch E, two-token flow):
+ * - The short-lived access token (~30 min) and the rotating refresh token
+ *   (7 days, single-use) live in localStorage, written only by
+ *   services/api.js. When the access token 401s, api.js silently refreshes
+ *   once and retries — users never see token mechanics.
+ * - On page load the session is RESTORED from the refresh token alone
+ *   (access token may be long dead after a closed tab), so users return to
+ *   the dashboard instead of a login wall.
+ * - Server-side session death (reuse detection, logout elsewhere, expiry)
+ *   surfaces as the devtrack:session-expired event → user=null → the
+ *   router's ProtectedRoute redirects to /login.
  */
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { api, getToken, setToken } from '../services/api'
+import {
+  api,
+  clearSession,
+  getRefreshToken,
+  getToken,
+  refreshSession,
+  storeSession,
+} from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -18,31 +32,40 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let cancelled = false
-    if (!getToken()) {
-      setLoading(false)
-      return undefined
-    }
-    api
-      .get('/auth/me')
-      .then((me) => {
+
+    async function restoreSession() {
+      try {
+        if (!getToken()) {
+          // No access token, but a stored refresh token can mint a fresh
+          // pair — this is the "close the laptop, come back tomorrow" path
+          if (!getRefreshToken()) return
+          await refreshSession()
+        }
+        const me = await api.get('/auth/me')
         if (!cancelled) setUser(me)
-      })
-      .catch(() => {
-        // 401: token expired/invalid — api.js already cleared it
+      } catch {
+        // Unrestorable session (expired/revoked/rejected): stay logged out
         if (!cancelled) setUser(null)
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false)
-      })
+      }
+    }
+
+    restoreSession()
+
+    // Fired by api.js when a silent refresh is rejected server-side
+    const onSessionExpired = () => setUser(null)
+    window.addEventListener('devtrack:session-expired', onSessionExpired)
     return () => {
       cancelled = true
+      window.removeEventListener('devtrack:session-expired', onSessionExpired)
     }
   }, [])
 
   const login = useCallback(async (email, password) => {
     // token: null — never attach a stale token to the login request itself
-    const { access_token } = await api.post('/auth/login', { email, password }, { token: null })
-    setToken(access_token)
+    const data = await api.post('/auth/login', { email, password }, { token: null })
+    storeSession(data)
     const me = await api.get('/auth/me')
     setUser(me)
     return me
@@ -59,7 +82,21 @@ export function AuthProvider({ children }) {
   )
 
   const logout = useCallback(() => {
-    setToken(null)
+    const refreshToken = getRefreshToken()
+    // Best-effort server-side revocation — this is what makes logout REAL
+    // for a thief who already copied the token (a pure client-side "logout"
+    // only forgets; the JWT stays valid until its ~30-min expiry).
+    // skipAuthRetry: no refresh dance for a session we're abandoning, and
+    // local state is cleared regardless of the outcome.
+    if (refreshToken) {
+      api
+        .post('/auth/logout', { refresh_token: refreshToken }, { skipAuthRetry: true })
+        .catch(() => {
+          // Backend down or access token already dead → nothing to revoke
+          // that the refresh-token TTL won't handle on its own
+        })
+    }
+    clearSession()
     setUser(null)
   }, [])
 
