@@ -50,7 +50,14 @@ DevTrack/
 │   └── .env                  # Local environment file
 ├── frontend/                 # Vite + React Single Page Application
 │   ├── src/
-│   │   └── App.jsx           # App entrypoint (UI pending)
+│   │   ├── components/       # Layout shell, ProtectedRoute guard
+│   │   ├── context/          # AuthContext (session state, login/register/logout)
+│   │   ├── pages/            # Dashboard, DSA Problems, Login, Register
+│   │   ├── services/         # api.js — fetch client, JWT handling, error mapping
+│   │   ├── App.jsx           # Route table
+│   │   ├── index.css         # Plain-CSS dark theme
+│   │   └── main.jsx          # Entry: BrowserRouter + AuthProvider
+│   ├── .env.example          # VITE_API_URL template
 │   ├── package.json
 │   └── vite.config.js
 ├── .gitignore
@@ -99,6 +106,8 @@ npm install
 npm run dev
 ```
 The React application will be available at [http://localhost:5173](http://localhost:5173).
+
+The frontend calls the API at `VITE_API_URL` (defaults to `http://localhost:8000/api/v1`); copy `.env.example` to `.env` to override. CORS on the backend already allows this origin.
 
 ### 3. Running Backend Tests
 ```bash
@@ -159,3 +168,6 @@ Ownership is enforced inside every SQL query: another user's record returns the 
 
 6. **Continuous Integration (GitHub Actions)**:
    Every push and pull request to `main` runs the full pytest suite on a clean Linux runner with no `.env`, no secrets, and no database service — the suite executes entirely against in-memory SQLite, proving test isolation from the Neon production database.
+
+7. **Frontend Auth Architecture (Single Token Source of Truth)**:
+   The JWT is written to `localStorage` by exactly one module (`services/api.js`), which also attaches it to every request and clears it on any 401 of an authenticated call — so a stale token degrades into a redirect to `/login`, never a broken screen. `AuthContext` revalidates the session on page load via `GET /auth/me`, `ProtectedRoute` holds the intended destination across the login redirect, and all API errors (422 field arrays, 429 retry hints, network failures) funnel through one `formatApiError` normalizer. Styling is deliberate plain CSS with no UI framework: layout, tokens, and a bar chart rendered with flex heights — zero runtime styling dependencies.
