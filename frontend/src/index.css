@@ -1,21 +1,59 @@
-/* DevTrack UI — plain CSS, no framework. Dark theme, CSS variables only. */
+/*
+ * DevTrack UI — Tailwind v4.
+ *
+ * The design tokens below mirror the Figma reference captured in
+ * DESIGN_NOTES.md (colours, radii, shadows, the DM Sans type ramp). Tailwind
+ * reads @theme and generates utilities from it, so `bg-surface`, `text-ink`,
+ * `text-brand` etc. stay in sync with the palette in one place — no hardcoded
+ * hex values scattered through components.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces */
+  --color-canvas: #f7f8fc;
+  --color-surface: #ffffff;
+  --color-subtle: #fafbfc;
+  --color-hover: #f6f6fb;
+
+  /* Text */
+  --color-ink: #171a2b;
+  --color-muted: #818698;
+  --color-faint: #a0a5b7;
+
+  /* Lines */
+  --color-line: #e7e9f0;
+  --color-line-strong: #e4e6ed;
+
+  /* Brand + semantics */
+  --color-brand: #635bff;
+  --color-brand-hover: #554de8;
+  --color-brand-tint: #f0efff;
+  --color-brand-soft: #d9d8ff;
+  --color-success: #22a06b;
+  --color-success-ink: #18855d;
+  --color-success-tint: #e8f7f1;
+  --color-warning: #f5a524;
+  --color-warning-ink: #cf7700;
+  --color-warning-tint: #fff2df;
+  --color-danger: #ef5b5b;
+  --color-danger-tint: #fdecec;
+  --color-info: #2676d9;
+  --color-info-tint: #eaf3ff;
+
+  --shadow-card: 0 2px 8px rgba(24, 27, 45, 0.025);
+  --shadow-brand: 0 6px 15px rgba(99, 91, 255, 0.25);
+}
 
 :root {
-  --bg: #0f1420;
-  --bg-raised: #171e2e;
-  --bg-input: #0c111b;
-  --border: #26304a;
-  --text: #e6ebf5;
-  --text-muted: #8b96ad;
-  --accent: #4f8cff;
-  --accent-hover: #6ba0ff;
-  --danger: #ff6b6b;
-  --easy: #3fb950;
-  --medium: #d29922;
-  --hard: #f85149;
-  --radius: 10px;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  color-scheme: dark;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  font-synthesis: none;
 }
 
 * {
@@ -24,402 +62,73 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.5;
 }
 
-a {
-  color: var(--accent);
-  text-decoration: none;
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
 }
 
-a:hover {
-  color: var(--accent-hover);
-}
-
-h1 {
-  font-size: 1.6rem;
-  margin: 0;
-}
-
-h3 {
-  font-size: 1rem;
-  margin: 0 0 0.75rem;
-}
-
-.app {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* --- Navigation ---------------------------------------------------------- */
-
-.navbar {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.75rem 1.5rem;
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  font-weight: 700;
-  font-size: 1.15rem;
-  color: var(--text);
-}
-
-.nav-links {
-  display: flex;
-  gap: 1rem;
-  flex: 1;
-}
-
-.nav-links a {
-  color: var(--text-muted);
-  padding: 0.3rem 0.6rem;
-  border-radius: 6px;
-}
-
-.nav-links a.active {
-  color: var(--text);
-  background: var(--bg-input);
-}
-
-.nav-auth {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.nav-user {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* --- Layout -------------------------------------------------------------- */
-
-.container {
-  width: min(1100px, 100% - 2.5rem);
-  margin: 1.5rem auto;
-  flex: 1;
-}
-
-.footer {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  padding: 1.25rem;
-  border-top: 1px solid var(--border);
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.25rem;
-}
-
-.muted {
-  color: var(--text-muted);
-}
-
-.loading-screen {
-  padding: 3rem;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-/* --- Buttons ------------------------------------------------------------- */
-
-.btn {
-  display: inline-block;
-  padding: 0.45rem 0.9rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font-size: 0.9rem;
+button {
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
 }
 
-.btn:hover:not(:disabled) {
-  border-color: var(--accent);
+::selection {
+  background: #dcdafe;
+  color: #3029a8;
 }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* --- Component classes reused across pages ------------------------------- */
+
+/* Page-level panel (the design's `rounded-2xl border bg-white p-5` card). */
+@utility card {
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+/* Interactive stat card: the reference lifts 2px on hover. */
+@utility stat-card {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(24, 27, 45, 0.06);
+  }
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.btn-ghost.active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.btn-small {
-  padding: 0.2rem 0.55rem;
-  font-size: 0.8rem;
-}
-
-/* --- Forms and auth cards ------------------------------------------------ */
-
-.auth-card {
-  max-width: 26rem;
-  margin: 3rem auto;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2rem;
-}
-
-.auth-card .muted {
-  margin-top: 0.25rem;
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  margin: 1.25rem 0;
-}
-
-.form label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.form input,
-.form select {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 0.5rem 0.7rem;
-  font-size: 0.95rem;
-}
-
-.form input:focus,
-.form select:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.form-grid {
+/* 36px tinted icon tile in four colour variants. */
+@utility icon-box {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
 }
 
-.form-grid .form-error,
-.form-grid .form-actions {
-  grid-column: 1 / -1;
+/* Conic progress ring (LeetCode card): ring geometry is fixed at 142px and
+   driven by inline percentages, so the gradient stops are set in the
+   component rather than here. */
+@utility ring-track {
+  background: conic-gradient(
+    var(--ring-success, var(--color-success)) 0deg var(--ring-easy, 0deg),
+    var(--color-warning) var(--ring-easy, 0deg) var(--ring-medium, 0deg),
+    var(--color-danger) var(--ring-medium, 0deg) 360deg
+  );
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.025);
 }
 
-.form-error {
-  color: var(--danger);
-  font-size: 0.88rem;
-  margin: 0;
-}
-
-/* --- Panels, stats, charts ----------------------------------------------- */
-
-.panel {
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.25rem;
-  margin-bottom: 1.25rem;
-}
-
-.panel-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: 1.25rem;
-  margin-bottom: 1.25rem;
-}
-
-.panel-grid .panel {
-  margin-bottom: 0;
-}
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 1.25rem;
-  margin-bottom: 1.25rem;
-}
-
-.stat-card {
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.1rem 1.25rem;
-}
-
-.stat-value {
-  font-size: 1.8rem;
-  font-weight: 700;
-}
-
-.stat-label {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.stat-hint {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  margin-top: 0.35rem;
-}
-
-.window-picker .btn {
-  margin-left: 0.4rem;
-}
-
-.bar-row {
-  display: grid;
-  grid-template-columns: 8.5rem 1fr 2.5rem;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.45rem;
-  font-size: 0.85rem;
-}
-
-.bar-label {
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bar-track {
-  background: var(--bg-input);
-  border-radius: 5px;
-  height: 10px;
-  overflow: hidden;
-}
-
-.bar-fill {
-  background: var(--accent);
-  height: 100%;
-  border-radius: 5px;
-}
-
-.bar-count {
-  text-align: right;
-}
-
-.trend-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 140px;
-  background: var(--bg-input);
-  border-radius: 8px;
-  padding: 6px;
-}
-
-.trend-bar {
-  flex: 1;
-  background: var(--accent);
-  border-radius: 2px 2px 0 0;
-  min-width: 2px;
-}
-
-.trend-axis {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  margin-top: 0.4rem;
-}
-
-/* --- Tables, badges, pagination ------------------------------------------ */
-
-.table-wrap {
-  overflow-x: auto;
-  padding: 0;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--border);
-}
-
-th {
-  color: var(--text-muted);
-  font-weight: 600;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.badge {
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-easy {
-  background: rgba(63, 185, 80, 0.15);
-  color: var(--easy);
-}
-
-.badge-medium {
-  background: rgba(210, 153, 34, 0.15);
-  color: var(--medium);
-}
-
-.badge-hard {
-  background: rgba(248, 81, 73, 0.15);
-  color: var(--hard);
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 2.5rem;
-}
-
-.empty-state p {
-  margin: 0.25rem 0;
+/* Adds a touch of breathing room to the top-level page container on very
+   small screens without repeating the padding scale everywhere. */
+@media (max-width: 420px) {
+  .ring-track {
+    width: 128px;
+    height: 128px;
+  }
 }

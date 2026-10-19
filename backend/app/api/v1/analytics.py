@@ -21,6 +21,7 @@ from app.schemas.analytics import (
     DsaAnalytics,
     GoalAnalytics,
     ProjectAnalytics,
+    ProjectProgress,
     TaskAnalytics,
     TrendPoint,
 )
@@ -37,6 +38,7 @@ TASK_PRIORITIES = ("low", "medium", "high")
 PROJECT_STATUSES = ("planning", "in_progress", "completed")
 
 TOPIC_LIMIT = 10  # dashboard shows the top N topics by problem count
+PROJECT_ITEM_LIMIT = 4  # "recent projects" list on the overview page
 
 
 def _zero_filled_counts(rows, keys, label) -> list:
@@ -147,6 +149,26 @@ def build_dashboard_statements(
         .select_from(Milestone)
         .join(Project, Milestone.project_id == Project.id)
         .where(Project.user_id == uid),
+        # ---- Per-project milestone rollup for the "recent projects" list
+        # LEFT JOIN so milestone-less projects still appear with 0/0; the
+        # aggregate is computed in SQL, so the limit keeps the row count to
+        # PROJECT_ITEM_LIMIT regardless of how many projects the user has.
+        "project_progress": select(
+            Project.id,
+            Project.title,
+            Project.status,
+            Project.created_at,
+            func.count(Milestone.id),
+            func.coalesce(
+                func.sum(case((Milestone.is_completed.is_(True), 1), else_=0)), 0
+            ),
+        )
+        .select_from(Project)
+        .outerjoin(Milestone, Milestone.project_id == Project.id)
+        .where(project_owner)
+        .group_by(Project.id, Project.title, Project.status, Project.created_at)
+        .order_by(Project.created_at.desc(), Project.id.desc())
+        .limit(PROJECT_ITEM_LIMIT),
     }
 
 
@@ -266,6 +288,7 @@ def get_dashboard(
     project_total = db.execute(stmts["projects_total"]).scalar_one()
     project_status_rows = db.execute(stmts["projects_by_status"]).all()
     milestone_total, milestone_completed = db.execute(stmts["milestones_rollup"]).one()
+    project_progress_rows = db.execute(stmts["project_progress"]).all()
 
     projects = ProjectAnalytics(
         total=project_total,
@@ -277,6 +300,20 @@ def get_dashboard(
         ],
         milestones_total=milestone_total,
         milestones_completed=milestone_completed,
+        items=[
+            ProjectProgress(
+                id=row[0],
+                title=row[1],
+                status=row[2],
+                created_at=row[3],
+                milestone_total=row[4],
+                milestone_completed=row[5],
+                # A project with no milestones has no meaningful percentage;
+                # report 0.0 rather than inventing progress (or dividing by 0).
+                progress_percent=round(row[5] * 100.0 / row[4], 1) if row[4] else 0.0,
+            )
+            for row in project_progress_rows
+        ],
     )
 
     return DashboardResponse(

@@ -51,3 +51,7 @@ Thumbs.db
 # Database
 *.sqlite3
 *.db
+
+# Pasted design reference (Figma Make export used to derive DESIGN_NOTES.md).
+# Not project code; kept on disk locally only.
+Project Tracking Dashboard*

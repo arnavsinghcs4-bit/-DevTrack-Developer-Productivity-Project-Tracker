@@ -69,11 +69,28 @@ class TaskAnalytics(BaseModel):
     by_priority: List[CountByPriority]  # low/medium/high, zero-filled
 
 
+class ProjectProgress(BaseModel):
+    """
+    One row of the dashboard's "recent projects" list. Milestone rollup is
+    computed per project in SQL (LEFT JOIN so a project with no milestones
+    reports 0/0 rather than disappearing from the list).
+    """
+
+    id: int
+    title: str
+    status: str
+    created_at: datetime
+    milestone_total: int
+    milestone_completed: int
+    progress_percent: float  # milestones completed / total, 0-100
+
+
 class ProjectAnalytics(BaseModel):
     total: int
     by_status: List[CountByStatus]  # planning/in_progress/completed, zero-filled
     milestones_total: int
     milestones_completed: int
+    items: List[ProjectProgress] = []  # most recently created first
 
 
 class DashboardResponse(BaseModel):

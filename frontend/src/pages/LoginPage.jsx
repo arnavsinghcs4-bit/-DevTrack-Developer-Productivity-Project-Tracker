@@ -1,13 +1,14 @@
 /**
- * Login page: email + password -> JWT -> back to wherever the user was headed.
- * Server-side rate limiting (10/min per IP) surfaces here as a 429 with a
- * friendly retry countdown, handled generically by formatApiError.
+ * Login page: email + password -> token pair -> back to wherever the user was
+ * headed. Server-side rate limiting (10/min per IP) surfaces here as a 429
+ * with a friendly retry countdown, handled generically by formatApiError.
  */
 
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { formatApiError } from '../services/api'
+import { Button, Field, inputClass, Icon } from '../components/ui'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -35,48 +36,61 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-card">
-      <h1>Welcome back</h1>
-      <p className="muted">Log in to keep your streak honest.</p>
+    <div className="mx-auto max-w-md">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-brand text-white shadow-brand">
+          <Icon.Trend size={22} />
+        </div>
+        <h1 className="text-2xl font-bold tracking-[-0.04em]">Welcome back</h1>
+        <p className="mt-2 text-sm text-muted">
+          Log in to keep your streak honest.
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="form">
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-            autoComplete="email"
-          />
-        </label>
+      <div className="card p-6 sm:p-7">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <Field label="Email">
+            <input
+              type="email"
+              className={inputClass}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              autoComplete="email"
+              autoFocus
+            />
+          </Field>
 
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            autoComplete="current-password"
-          />
-        </label>
+          <Field label="Password">
+            <input
+              type="password"
+              className={inputClass}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              autoComplete="current-password"
+            />
+          </Field>
 
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
+          {error && (
+            <p className="text-sm text-danger" role="alert">
+              {error}
+            </p>
+          )}
 
-        <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? 'Logging in…' : 'Log in'}
-        </button>
-      </form>
+          <Button type="submit" size="lg" disabled={busy} className="mt-1 w-full">
+            {busy ? 'Logging in…' : 'Log in'}
+          </Button>
+        </form>
+      </div>
 
-      <p className="muted">
-        No account yet? <Link to="/register">Create one</Link>
+      <p className="mt-6 text-center text-sm text-muted">
+        No account yet?{' '}
+        <Link to="/register" className="font-semibold text-brand hover:underline">
+          Create one
+        </Link>
       </p>
     </div>
   )

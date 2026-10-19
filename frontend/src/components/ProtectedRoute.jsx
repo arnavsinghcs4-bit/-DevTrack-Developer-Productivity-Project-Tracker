@@ -6,18 +6,13 @@
 
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { Spinner } from './ui'
 
 export default function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   const location = useLocation()
 
-  if (loading) {
-    return (
-      <div className="loading-screen" role="status">
-        Checking your session…
-      </div>
-    )
-  }
+  if (loading) return <Spinner label="Checking your session…" />
 
   if (!user) {
     // Remember where the user wanted to go so login can send them back
